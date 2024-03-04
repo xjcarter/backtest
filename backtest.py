@@ -3,6 +3,7 @@ from datetime import date, datetime
 from prettytable import PrettyTable
 from indicators import StDev, MondayAnchor
 import calendar_calcs
+from security import SecType
 
 class DumpFormat(str, Enum):
     STDOUT = 'STDOUT'
@@ -10,6 +11,9 @@ class DumpFormat(str, Enum):
     JSON = 'JSON'
     CSV = 'CSV'
 
+class TradeType(str, Enum):
+    SELL = 'SELL'
+    BUY = 'BUY'
 
 class BackTest():
     def __init__(self, security, json_config, ref_index=None):
@@ -37,6 +41,15 @@ class BackTest():
                                 "leverage_target": 1
                             }
         }
+
+        Security Class - member variables:
+            self.symbol = symbol string 
+            self.sec_type = SecurityType enum
+            self.margin_req = margin requirement for futures 
+            self.tick_size = tick size 
+            self.tick_value = tick value 
+            self._df = datafram of securirty time series 
+            self._use_raw = use non adjusted prices
         """
 
         ## strategy settings 
@@ -88,21 +101,38 @@ class BackTest():
 
     ## trade execution functions
 
-    def BUY(self, price, security):
-        wallet = self.config.get('wallet')
-        if wallet is None: 
-            return 0
+    def enter_trade(self, trade_type, security, price):
+        if not self.wallet
+            return 
 
-        cash = wallet.get('cash', 0)
-        alloc_pct = wallet('wallet_alloc_prc', 1)
-        borrow_margin_pct = wallet('borrow_margin_pct', 1)
-    
+        self.borrow_margin_pct = 1
+  
+        share_limit = self.config.get('position_limit', 0)
+        if security.sec_type = SecType.FUTURE:
+            margin_req = security.margin_req
+
+        if wallet > 0 and price is not None:
+            if price > 0:
+                shares = int((self.wallect_alloc_pct * self.wallet)/price)
+                if share_limit is not None:
+                    shares = min(shares, share_limit)
+
+        if trade_type = TradeType.BUY:
+            ## build trade dict
+            pass
 
 
+        if trade_type = TradeType.SELL:
+            ## build trade dict
+            pass
+
+        ## add to self.trades
+
+
+
+    def close_trade(self, trade_type, security, price):
         pass
 
-    def SELL(self, price, security):
-        pass
 
     def entry_OPEN(self, cur_dt, bar, ref_bar=None):
         end_of_week = calendar_calcs.is_end_of_week(cur_dt, self.holidays)
@@ -110,7 +140,8 @@ class BackTest():
         if self.anchor.count() > 0:
             anchor_bar, bkout = self.anchor.valueAt(0)
             if bkout < 0 and end_of_week == False:
-                self.BUY( bar['Open'), self.security )
+                self.enter_trade( TradeType.BUY, self.security, bar['Open'] )
+
 
     def entry_CLOSE(self, cur_dt, bar, ref_bar=None):
         pass
