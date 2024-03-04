@@ -88,13 +88,24 @@ class Security():
 
 
 if __name__ == '__main__':
-    test_def = { "symbol": "SPY", 
+    etf_def = {
+            "symbol": "SPY", 
             "sec_type": "ETF",
             "tick_size": 0.01,
             "tick_value": 0.01
     }
 
-    spy = Security(test_def)
+    """
+    future_def = {
+            "symbol": "ES1", 
+            "sec_type": "FUTURE",
+            "tick_size": 0.25,
+            "tick_value": 12.50,
+            "margin_requirement": 12000
+    }
+    """
+
+    spy = Security(etf_def)
 
     i = 0
     while i < 3:
