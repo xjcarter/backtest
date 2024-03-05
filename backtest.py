@@ -1,7 +1,7 @@
 import pandas
 from datetime import date, datetime
 from prettytable import PrettyTable
-from indicators import StDev, MondayAnchor
+from indicators import StDev, MondayAnchor, HighestValue, LowestValue
 import calendar_calcs
 from security import SecType
 
@@ -43,14 +43,19 @@ class BackTest():
         }
 
         Security Class - member variables:
-            self.symbol = symbol string 
+            self.symbol = symbol string 9
             self.sec_type = SecurityType enum
             self.margin_req = margin requirement for futures 
+            self.leverage_target = leverage target for futures (in place of using margin_req as basis) 
             self.tick_size = tick size 
             self.tick_value = tick value 
             self._df = datafram of securirty time series 
             self._use_raw = use non adjusted prices
         """
+
+        ## turn on backtest
+        self.backtest_disabled = False
+        self.start_dt = None
 
         ## strategy settings 
         self.config = json_config
@@ -79,6 +84,7 @@ class BackTest():
         ## indicators and tools
 
         self.stdev = StDev(sample_size=50)
+        self.high_marker = self.low_marker = None
         self.anchor = MondayAnchor(derived_len=20)
         self.holidays = calendar_calcs.load_holidays()
 
@@ -96,6 +102,28 @@ class BackTest():
             self.dollar_limit = limit_dict.get('dollar_limit', 100000000)
             self.position_limit = limit_dict.get('position_limit', 100000)
 
+    @property
+    def LONG(self):
+        if self.current_trade is not None:
+            p = self.current_trade['position']
+            if p > 0:
+                return True
+        return False
+
+    @property
+    def SHORT(self):
+        if self.current_trade is not None:
+            p = self.current_trade['position']
+            if p < 0:
+                return True
+        return False
+
+    @property
+    def FLAT(self):
+        if self.current_trade is None:
+            return True
+        return False
+            
     ## trade execution functions
 
     def enter_trade(self, trade_type, str_dt, security, price):
@@ -104,7 +132,7 @@ class BackTest():
             return None 
 
         basis = price
-        if security.sec_type = SecType.FUTURE:
+        if security.sec_type == SecType.FUTURE:
             ## allocate based on margin requirment per contact.
             ## otherwise it would be share price
             basis = security.margin_req
@@ -115,6 +143,20 @@ class BackTest():
             ## 2. then borrow on that allocation if borrow margin pct is given.
             trade_alloc = (self.wallet_alloc_pct * self.wallet)/self.borrow_margin_pct
             shares = int(trade_alloc/basis)
+
+            if security.sec_type == SecType.FUTURE:
+                leverage_tgt = security.get('leverage_target')
+                if leverage_tgt:
+                    tick_size = security.get('tick_size', 0)
+                    tick_value = security.get('tick_value', 0)
+
+                    assert(tick_size > 0)
+                    assert(tick_value > 0)
+                    multiplier = tick_value / tick_size
+
+                    ## buy contracts in accordance to desired leverage target
+                    shares = int((trade_alloc * leverage_tgt)/(price * multiplier))
+
 
             ## limit total shares/contracts that can be traded
             if self.position_limit: 
@@ -146,13 +188,54 @@ class BackTest():
         self.pnl += trade_value
         rtn = trade_value/self.current_trade['DollarBase']
         exit_dict = {ExDate=str_dt, Exit=price, Value=trade_value, TradeRtn=rtn, PNL=self.pnl}
-        
+
         self.current_trade.update(exit_dict)
+
         dict_order = 'InDate ExDate Position Duration Entry Exit DollarBase Value TradeRtn PNL'
         self.trades.append( _reorder_keys(self.current_trade, dict_order.split()) )
 
+        self.current_trade = None
+
+
+    def calc_price_stop(self, anchor, multiplier=2.5, default=0.30):
+        m = None
+        volatility = self.stdev.valueAt(0)
+
+        if self.LONG:
+            if volatility is not None:
+                m = anchor - (volatility * multiplier)
+            else:
+                m = anchor * (1-default)
+
+        if self.SHORT:
+            anchor = self.low_marker.valueAt(0)
+            if volatility is not None:
+                m = anchor + (volatility * multiplier)
+            else:
+                m = anchor * (1+default)
+
+        return m 
+
+    def calc_drawdown_stop(self):
+        ## calc stop based on percentage loss in equity
+        pass
+
+    def update_stop(self, bar):
+        if self.LONG:
+            self.high_marker.push(bar['High'])
+            self.stop_level = max(self.stop_level, self.calc_price_stop( self.high_marker.highest))
+
+        if self.SHORT:
+            self.low_marker.push(bar['Low'])
+            self.stop_level = min(self.stop_level, self.calc_price_stop( self.low_marker.lowest))
+
 
     def entry_OPEN(self, cur_dt, bar, ref_bar=None):
+        if self.backtest_disabled:
+            return
+
+        if not self.FLAT:
+            return
 
         end_of_week = calendar_calcs.is_end_of_week(cur_dt, self.holidays)
 
@@ -160,27 +243,40 @@ class BackTest():
             anchor_bar, bkout = self.anchor.valueAt(0)
             if bkout < 0 and end_of_week == False:
                 self.current_trade = self.enter_trade( TradeType.BUY, bar['Date'], self.security, bar['Open'] )
+                self.high_marker = HighestValue( bar['Open'] )
+                self.stop_level = self.calc_price_stop( self.high_marker.highest )
 
 
     def exit_OPEN(self, cur_dt, bar, ref_bar=None):
-        exit_trade( bar['Date'], security, bar['Open'] )
+        if self.backtest_disabled:
+            return
+
+        if self.FLAT:
+            return
+
+        self.exit_trade( bar['Date'], security, bar['Open'] )
+
 
     def entry_CLOSE(self, cur_dt, bar, ref_bar=None):
-        #self.current_trade = self.enter_trade( TradeType.BUY, bar['Date'], self.security, bar['Close'] )
-        pass
+        if self.backtest_disabled:
+            return
+
+        if not self.FLAT:
+            return
+
+        ## self.current_trade = self.enter_trade( TradeType.BUY, bar['Date'], self.security, bar['Close'] )
+
 
     def exit_CLOSE(self, cur_dt, bar, ref_bar=None):
-        exit_trade( bar['Date'], security, bar['Close'] )
+        if self.backtest_disabled:
+            return
+
+        if self.FLAT:
+            return
+
+        self.exit_trade( bar['Date'], security, bar['Close'] )
 
 
-    def calc_price_stop(self):
-        ## calc stop based on price distribution
-        ## i.e. volatility
-        pass
-
-    def calc_drawdown_stop(self):
-        ## calc stop based on percentage loss in equity
-        pass
 
 
     ## position, %wallet and absolute dollar amount
@@ -220,18 +316,20 @@ class BackTest():
         pass
 
    
-    def run(self, start_from_dt):
-
-        start_dt = None
+    def start_from(self, start_from_dt):
         if start_from_dt is not None:
-            start_dt = datetime.strptime(start_from_dt,"%Y-%m-%d").date()
+            self.start_dt = datetime.strptime(start_from_dt,"%Y-%m-%d").date()
 
-        holidays = calendar_calcs.load_holidays()
+    def run(self):
 
         # i = integer index
         # cur_dt = bar datetime = datetime.strptime(dt)
         # bar = OHLC, etc data.
         for i, cur_dt, bar in self.security.next_bar():
+
+            self.backtest_disabled = False
+            if self.start_dt and cur_dt < self.start_dt:
+                self.backtest_disabled = True 
 
             ref_bar = None
             if self.ref_index is not None:
@@ -247,14 +345,16 @@ class BackTest():
 
             # collect all analytics, but don't start trading until we
             # hit the the start_from_dt trading date
-            if start_dt is not None and cur_dt < start_dt: continue
 
             self.exit_CLOSE(cur_dt, bar, ref_bar)
             self entry_CLOSE(cur_dt, bar, ref_bar)
 
-            ## record trade info for thed day.
+            self.update_stop(bar)
 
-            if self.entry.get('position',0) == 0:
+            ## record trade info for the day.
+
+            if self.FLAT:
+                self.high_marker = self.low_marker = None
                 self.update_position_limit()
                 self.update_dollar_alloc()
                 self.update_dollar_limit()
@@ -262,7 +362,7 @@ class BackTest():
         self.generate_metrics()
 
         self.dump_trades()
-        f or fmt in [DumpFormat.STDOUT, DumpFormat.CSV]:
+        for fmt in [DumpFormat.STDOUT, DumpFormat.CSV]:
             self.trade_series(fmt)
         self.dump_metrics()
 

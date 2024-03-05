@@ -102,6 +102,7 @@ if __name__ == '__main__':
             "tick_size": 0.25,
             "tick_value": 12.50,
             "margin_requirement": 12000
+            "leverage_target": 4 
     }
     """
 
