@@ -66,7 +66,7 @@ class Security():
             dt_index = row['Date']
             cur_dt = datetime.strptime(dt_index,"%Y-%m-%d").date()
 
-            yield index, dt_index, cur_dt, row 
+            yield index, cur_dt, row 
 
     def next_bar(self):
         return next(self._bar_generator)
@@ -83,7 +83,7 @@ class Security():
         dt_index = row['Date']
         cur_dt = datetime.strptime(dt_index,"%Y-%m-%d").date()
 
-        return index, dt_index, cur_dt, row 
+        return index, cur_dt, row 
             
 
 
@@ -109,8 +109,8 @@ if __name__ == '__main__':
 
     i = 0
     while i < 3:
-        i, dt, dtt, row  = spy.next_bar()
-        print(i, dt, dtt, row)
+        i, dtt, row  = spy.next_bar()
+        print(i, dtt, row)
 
     v = spy.fetch_bar("2008-10-14")
     ## just prints out the unpacked tuple
