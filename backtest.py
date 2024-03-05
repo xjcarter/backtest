@@ -63,19 +63,16 @@ class BackTest():
         self.borrow_margin_pct = 1
         self._initialize_wallet()
 
-        self.dollar_base = None
-
         ## limit on capital at risk
         self.dollar_limit = None
         #W limit on position size
         self.position_limit = None
         self._initialize_limits()
 
-        ## dict of { date, price, position, entry_label }
-        self.entry = dict()  
-        ## dict of { date, price, position, exit_label }
-        self.exit = dict()  
+        ## dict of { date, price, position, ex_date, ex_price, entry_label, exit_label, ... }
+        self.current_trade = None  
 
+        self.pnl = 0
         self.trades = list()
         self.trade_series = list()
 
@@ -101,56 +98,79 @@ class BackTest():
 
     ## trade execution functions
 
-    def enter_trade(self, trade_type, security, price):
-        if not self.wallet
-            return 
+    def enter_trade(self, trade_type, str_dt, security, price):
 
-        self.borrow_margin_pct = 1
-  
-        share_limit = self.config.get('position_limit', 0)
+        if not self.wallet:
+            return None 
+
+        basis = price
         if security.sec_type = SecType.FUTURE:
-            margin_req = security.margin_req
+            ## allocate based on margin requirment per contact.
+            ## otherwise it would be share price
+            basis = security.margin_req
 
-        if wallet > 0 and price is not None:
-            if price > 0:
-                shares = int((self.wallect_alloc_pct * self.wallet)/price)
-                if share_limit is not None:
-                    shares = min(shares, share_limit)
+        if self.wallet > 0:
+            assert(basis > 0)
+            ## 1. get the cash allocated to the trade
+            ## 2. then borrow on that allocation if borrow margin pct is given.
+            trade_alloc = (self.wallet_alloc_pct * self.wallet)/self.borrow_margin_pct
+            shares = int(trade_alloc/basis)
 
-        if trade_type = TradeType.BUY:
-            ## build trade dict
-            pass
+            ## limit total shares/contracts that can be traded
+            if self.position_limit: 
+                shares = min(shares, self.position_limit)
+
+        if shares > 0:
+            dollar_base = shares * basis
+            if trade_type = TradeType.SELL:
+                shares = -shares
+
+            return {InDate=str_dt, Entry=price, Position=shares, DollarBase=dollar_base, Duration=0}
 
 
-        if trade_type = TradeType.SELL:
-            ## build trade dict
-            pass
+    def exit_trade(self, str_dt, security, price):
 
-        ## add to self.trades
+        def _reorder_keys(dikt, keys_order):
+            return {key: dikt[key] for key in keys_order if key in dikt}
 
+        exit_dt = str_dt
+        tick_size = security.get('tick_size', 0)
+        tick_value = security.get('tick_value', 0)
 
+        assert(tick_size > 0)
+        assert(tick_value > 0)
 
-    def close_trade(self, trade_type, security, price):
-        pass
+        delta = price - self.current_trade['Entry']
+        trade_value = (delta/tick_size) * tick_value * self.current_trade['Position']
+
+        self.pnl += trade_value
+        rtn = trade_value/self.current_trade['DollarBase']
+        exit_dict = {ExDate=str_dt, Exit=price, Value=trade_value, TradeRtn=rtn, PNL=self.pnl}
+        
+        self.current_trade.update(exit_dict)
+        dict_order = 'InDate ExDate Position Duration Entry Exit DollarBase Value TradeRtn PNL'
+        self.trades.append( _reorder_keys(self.current_trade, dict_order.split()) )
 
 
     def entry_OPEN(self, cur_dt, bar, ref_bar=None):
+
         end_of_week = calendar_calcs.is_end_of_week(cur_dt, self.holidays)
 
         if self.anchor.count() > 0:
             anchor_bar, bkout = self.anchor.valueAt(0)
             if bkout < 0 and end_of_week == False:
-                self.enter_trade( TradeType.BUY, self.security, bar['Open'] )
+                self.current_trade = self.enter_trade( TradeType.BUY, bar['Date'], self.security, bar['Open'] )
 
-
-    def entry_CLOSE(self, cur_dt, bar, ref_bar=None):
-        pass
 
     def exit_OPEN(self, cur_dt, bar, ref_bar=None):
+        exit_trade( bar['Date'], security, bar['Open'] )
+
+    def entry_CLOSE(self, cur_dt, bar, ref_bar=None):
+        #self.current_trade = self.enter_trade( TradeType.BUY, bar['Date'], self.security, bar['Close'] )
         pass
 
     def exit_CLOSE(self, cur_dt, bar, ref_bar=None):
-        pass
+        exit_trade( bar['Date'], security, bar['Close'] )
 
 
     def calc_price_stop(self):
@@ -209,14 +229,13 @@ class BackTest():
         holidays = calendar_calcs.load_holidays()
 
         # i = integer index
-        # str_cur_dt= bar date string
         # cur_dt = bar datetime = datetime.strptime(dt)
         # bar = OHLC, etc data.
-        for i, str_cur_dt, cur_dt, bar in self.security.next_bar():
+        for i, cur_dt, bar in self.security.next_bar():
 
             ref_bar = None
             if self.ref_index is not None:
-                ref_bar = self.ref_index.fetch_bar(str_cur_dt)
+                ref_bar = self.ref_index.fetch_bar(bar['Date'])
             
             self.exit_OPEN(cur_dt, bar, ref_bar)
             self.entry_OPEN(cur_dt, bar, ref_bar)
