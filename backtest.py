@@ -46,7 +46,7 @@ class BackTest():
             self.symbol = symbol string 9
             self.sec_type = SecurityType enum
             self.margin_req = margin requirement for futures 
-            self.leverage_target = leverage target for futures (in place of using margin_req as basis) 
+            self.leverage_target = leverage target for futures 
             self.tick_size = tick size 
             self.tick_value = tick value 
             self._df = datafram of securirty time series 
@@ -126,7 +126,7 @@ class BackTest():
             
     ## trade execution functions
 
-    def enter_trade(self, trade_type, str_dt, security, price):
+    def enter_trade(self, trade_type, str_dt, security, price, label=''):
 
         if not self.wallet:
             return None 
@@ -167,10 +167,10 @@ class BackTest():
             if trade_type = TradeType.SELL:
                 shares = -shares
 
-            return {InDate=str_dt, Entry=price, Position=shares, DollarBase=dollar_base, Duration=0}
+            return {InDate=str_dt, Entry=price, Position=shares, DollarBase=dollar_base, Duration=0, InSignal=label}
 
 
-    def exit_trade(self, str_dt, security, price):
+    def exit_trade(self, str_dt, security, price, label=""):
 
         def _reorder_keys(dikt, keys_order):
             return {key: dikt[key] for key in keys_order if key in dikt}
@@ -187,14 +187,12 @@ class BackTest():
 
         self.pnl += trade_value
         rtn = trade_value/self.current_trade['DollarBase']
-        exit_dict = {ExDate=str_dt, Exit=price, Value=trade_value, TradeRtn=rtn, PNL=self.pnl}
+        exit_dict = {ExDate=str_dt, Exit=price, Value=trade_value, TradeRtn=rtn, PNL=self.pnl, ExSignal=label}
 
         self.current_trade.update(exit_dict)
 
-        dict_order = 'InDate ExDate Position Duration Entry Exit DollarBase Value TradeRtn PNL'
+        dict_order = 'InDate ExDate Position Duration InSignal Entry ExSignal Exit DollarBase Value TradeRtn PNL'
         self.trades.append( _reorder_keys(self.current_trade, dict_order.split()) )
-
-        self.current_trade = None
 
 
     def calc_price_stop(self, anchor, multiplier=2.5, default=0.30):
@@ -242,7 +240,7 @@ class BackTest():
         if self.anchor.count() > 0:
             anchor_bar, bkout = self.anchor.valueAt(0)
             if bkout < 0 and end_of_week == False:
-                self.current_trade = self.enter_trade( TradeType.BUY, bar['Date'], self.security, bar['Open'] )
+                self.current_trade = self.enter_trade( TradeType.BUY, bar['Date'], self.security, bar['Open'], label='LEX' )
                 self.high_marker = HighestValue( bar['Open'] )
                 self.stop_level = self.calc_price_stop( self.high_marker.highest )
 
@@ -264,7 +262,7 @@ class BackTest():
         if not self.FLAT:
             return
 
-        ## self.current_trade = self.enter_trade( TradeType.BUY, bar['Date'], self.security, bar['Close'] )
+        ## self.current_trade = self.enter_trade( TradeType.BUY, bar['Date'], self.security, bar['Close'], label = "" )
 
 
     def exit_CLOSE(self, cur_dt, bar, ref_bar=None):
@@ -274,9 +272,15 @@ class BackTest():
         if self.FLAT:
             return
 
-        self.exit_trade( bar['Date'], security, bar['Close'] )
+        pnl = bar['Close'] - self.current_trade['Entry']
+        if pnl > 0:
+            self.exit_trade( bar['Date'], security, bar['Close'], label='PNL' )
 
+        elif self.current_trade['Duration'] > self.config['duration']:
+            self.exit_trade( bar['Date'], security, bar['Close'], label='EXPIRY' )
 
+        elif self.current_trade['Close'] <= self.stop_level:
+            self.exit_trade( bar['Date'], security, bar['Close'], label='STOP_OUT' )
 
 
     ## position, %wallet and absolute dollar amount
@@ -318,7 +322,63 @@ class BackTest():
    
     def start_from(self, start_from_dt):
         if start_from_dt is not None:
-            self.start_dt = datetime.strptime(start_from_dt,"%Y-%m-%d").date()
+            if isinstance(start_from_dt, date):
+                self.start_dt = start_from_dt
+            else:
+                self.start_dt = datetime.strptime(start_from_dt,"%Y-%m-%d").date()
+
+    def mark_to_market(self, mark_price):
+        tick_size = self.security['tick_size']
+        tick_value = self.security['tick_value']
+        m = tick_value/tick_size
+
+        return m * (mark_price - self.current_trade['Entry']) * self.current_trade['Position']
+       
+    def record_backtest_data(self, bar):
+
+        def _fstr(value):
+            v = round(value, 3)
+            q = round(valuem 2)
+            if v == q:
+                return str(q)
+            return str(v)
+
+        def _istr(value):
+            return str(value)
+
+        row = {
+                Date=bar['Date'],
+                Close=bar['Close'],
+                InSignal="",
+                Entry="",
+                ExSignal="",
+                Exit="",
+                Position="",
+                StopLevel="",
+                MTM= "",
+                Equity=""
+            }
+
+        mtm = 0
+        if not self.FLAT:
+            if bar['Date'] == self.current_trade['InDate']:
+                row['InSignal'] = self.current_trade['InSignal']
+                row['Entry'] = _fstr(self.current_trade['Entry'])
+
+            row['Position'] = _istr(self.current_trade['Position'])
+            row['StopLevel'] = _fstr(self.current_trade['StopLevel'])
+
+            if bar['Date'] == self.current_trade.get('ExDate'):
+                row['ExSignal'] = self.current_trade['ExSignal']
+                row['Exit'] = _fstr(self.current_trade['Exit'])
+
+            mtm = self.mark_to_market(bar['Close']) 
+
+        row['MTM'] = _fstr( mtm)
+        row['Equity'] = self.wallet + mtm 
+
+        return mtm, row
+
 
     def run(self):
 
@@ -347,12 +407,19 @@ class BackTest():
             # hit the the start_from_dt trading date
 
             self.exit_CLOSE(cur_dt, bar, ref_bar)
-            self entry_CLOSE(cur_dt, bar, ref_bar)
+            self.entry_CLOSE(cur_dt, bar, ref_bar)
 
             self.update_stop(bar)
 
             ## record trade info for the day.
+            mtm, backtest_dict = self.record_backtest_data( bar )
+            self.trade_series.append( backtest_dict )
 
+            ## reset trade
+            if self.current_trade.get('Exit'):
+                self.wallet += mtm 
+                self.current_trade = None
+            
             if self.FLAT:
                 self.high_marker = self.low_marker = None
                 self.update_position_limit()
