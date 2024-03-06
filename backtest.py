@@ -81,6 +81,9 @@ class BackTest():
         self.trades = list()
         self.trade_series = list()
 
+        ## backtest results dict
+        self.results = None
+
         ## indicators and tools
 
         self.stdev = StDev(sample_size=50)
@@ -303,22 +306,96 @@ class BackTest():
         pass
 
 
-    ## post simulation functions 
+    ## post-simulation functions 
 
     def generate_metrics(self):
-        ## sharpe, etc.
-        pass
 
-    def dump_trades(self, format=DumpFormat.CSV):
+        trades_df = pandas.DataFrame(self.trades)
+        pnl_series = pandas.DataFrame(self.trade_series)
+
+        dollars = trades_df['Value']
+        wins = trades_df[ trades_df['Value'] > 0]
+
+        trade_count = len(trades_df)
+        win_pct = len(wins)/trade_count
+
+        returns = (pnl_series['Equity'] / pnl_series['Equity'].shift(1)) - 1
+        returns.dropna(inplace=True)
+
+        tf = trades_df[trades_df['Exit'] > 0]
+        trade_returns = trades_df['TradeRtn'] 
+
+        trade_wins = trade_returns[trade_returns >= 0]
+        trade_losses = trade_returns[trade_returns < 0]
+
+        profit_factor = trade_wins.sum()/(-1 * trade_losses.sum())
+        avg_win = trade_wins.mean()
+        avg_loss = trade_losses.mean()
+
+        ## vectorized calc of drawdown
+        rolling_max = pnl_series['Equity'].cummax()
+        jj = (pnl_series['Equity']/rolling_max) - 1
+        dd = jj.min()
+
+        years = float(pnl_series.shape[0]/252.0)
+
+        #total return
+        totalRtn = (pnl_series.iloc[-1]['Equity']/pnl_series.iloc[0]['Equity']) - 1
+
+        #compounded annualize growth rate
+        cagr = ((pnl_series.iloc[-1]['Equity']/pnl_series.iloc[0]['Equity']) ** (1.0/years)) - 1
+        sharpe = cagr/(returns.std() * math.sqrt(252))
+
+        self.results = dict(Sharpe=sharpe,
+                        CAGR=cagr,
+                        MaxDD=dd,
+                        Trades=trade_count,
+                        WinPct=win_pct,
+                        PFactor=profit_factor,
+                        AvgWin=avg_win,
+                        AvgLoss=avg_loss,
+                        Years=years,
+                        TotalRtn=totalRtn)
+
+
+    def dump_trades(self, fmt=DumpFormat.CSV):
         ## stdout, csv, html
-        pass
-    def dump_trades_series(self, format=DumpFormat.STDOUT):
+        trades_df = pandas.DataFrame(self.trades)
+        if fmt == DumpFormat.CSV:
+            trades_df.to_csv('trades.csv', index=False)
+            
+    def dump_trade_series(self, fmt=DumpFormat.STDOUT):
         ## stdout, csv, html
-        pass
-    def dump_metrics(self, format=DumpFormat.STDOUT):
+        trade_series_df = pandas.DataFrame(self.trade_series)
+        pnl_series_df = trade_series_df[['Date','Equity']]
+        if fmt == DumpFormat.CSV:
+            trade_series_df.to_csv('trade_series.csv', index=False)
+            pnl_series_df.to_csv('pnl_series.csv', index=False)
+
+        if fmt == DumpFormat.STDOUT:
+            daily_table = PrettyTable(trade_series_df.columns.tolist())
+            daily_table.align['MTM'] = "r"
+            daily_table.align['Equity'] = "r"
+            for i, row in trade_series_df.iterrows():
+                daily_table.add_row(row.tolist())
+            print(daily_table)
+
+    def dump_metrics(self, fmt=DumpFormat.STDOUT):
         ## stdout, html, and json
-        pass
-
+        results_df = pandas.DataFrame([self.results])
+        results_df = results_df.T
+        results_df.reset_index(inplace = True)
+        results_df.rename(columns={'index':'Metric', 0:'Value'}, inplace=True)
+       
+        if fmt == DumpFormat.STDOUT:
+            daily_table = PrettyTable(results_df.columns.tolist())
+            daily_table.align['Metric'] = "l"
+            daily_table.align['Value'] = "r"
+            daily_table.float_format['Value'] = ".3"
+            for i, row in results_df.iterrows():
+                daily_table.add_row(row.tolist())
+            print(daily_table)
+            
    
     def start_from(self, start_from_dt):
         if start_from_dt is not None:
@@ -372,15 +449,17 @@ class BackTest():
                 row['ExSignal'] = self.current_trade['ExSignal']
                 row['Exit'] = _fstr(self.current_trade['Exit'])
 
-            mtm = self.mark_to_market(bar['Close']) 
+            mtm = self.mark_to_market( bar['Close']) 
 
         row['MTM'] = _fstr( mtm)
-        row['Equity'] = self.wallet + mtm 
+        row['Equity'] = _fstr(self.wallet + mtm) 
 
         return mtm, row
 
 
     def run(self):
+
+        self.results = None
 
         # i = integer index
         # cur_dt = bar datetime = datetime.strptime(dt)
@@ -428,9 +507,9 @@ class BackTest():
 
         self.generate_metrics()
 
-        self.dump_trades()
         for fmt in [DumpFormat.STDOUT, DumpFormat.CSV]:
-            self.trade_series(fmt)
+            self.dump_trade_series(fmt)
         self.dump_metrics()
+        self.dump_trades()
 
 
