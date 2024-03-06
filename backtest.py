@@ -164,10 +164,10 @@ class BackTest():
 
         if shares > 0:
             dollar_base = shares * basis
-            if trade_type = TradeType.SELL:
+            if trade_type == TradeType.SELL:
                 shares = -shares
 
-            return {InDate=str_dt, Entry=price, Position=shares, DollarBase=dollar_base, Duration=0, InSignal=label}
+            return dict(InDate=str_dt, Entry=price, Position=shares, DollarBase=dollar_base, Duration=0, InSignal=label)
 
 
     def exit_trade(self, str_dt, security, price, label=""):
@@ -187,7 +187,7 @@ class BackTest():
 
         self.pnl += trade_value
         rtn = trade_value/self.current_trade['DollarBase']
-        exit_dict = {ExDate=str_dt, Exit=price, Value=trade_value, TradeRtn=rtn, PNL=self.pnl, ExSignal=label}
+        exit_dict = dict(ExDate=str_dt, Exit=price, Value=trade_value, TradeRtn=rtn, PNL=self.pnl, ExSignal=label)
 
         self.current_trade.update(exit_dict)
 
@@ -338,7 +338,7 @@ class BackTest():
 
         def _fstr(value):
             v = round(value, 3)
-            q = round(valuem 2)
+            q = round(value, 2)
             if v == q:
                 return str(q)
             return str(v)
@@ -346,7 +346,7 @@ class BackTest():
         def _istr(value):
             return str(value)
 
-        row = {
+        row = dict( 
                 Date=bar['Date'],
                 Close=bar['Close'],
                 InSignal="",
@@ -357,7 +357,7 @@ class BackTest():
                 StopLevel="",
                 MTM= "",
                 Equity=""
-            }
+            ) 
 
         mtm = 0
         if not self.FLAT:
