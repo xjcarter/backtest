@@ -44,7 +44,7 @@ class BackTest():
 
         Security Class - member variables:
             self.symbol = symbol string 9
-            self.sec_type = SecurityType enum
+            self.sec_type = SecType enum
             self.margin_req = margin requirement for futures 
             self.leverage_target = leverage target for futures 
             self.tick_size = tick size 
@@ -72,6 +72,7 @@ class BackTest():
         self.dollar_limit = None
         #W limit on position size
         self.position_limit = None
+        self.leverage_target = None
         self._initialize_limits()
 
         ## dict of { date, price, position, ex_date, ex_price, entry_label, exit_label, ... }
@@ -81,12 +82,12 @@ class BackTest():
         self.trades = list()
         self.trade_series = list()
 
-        ## backtest results dict
-        self.results = None
+        ## backtest metrics dict
+        self.metrics = None
 
         ## indicators and tools
 
-        self.stdev = StDev(sample_size=50)
+        self.stdev = StDev( sample_size= self.config.get('StDev', 50) )
         self.high_marker = self.low_marker = None
         self.anchor = MondayAnchor(derived_len=20)
         self.holidays = calendar_calcs.load_holidays()
@@ -104,20 +105,19 @@ class BackTest():
         if limit_dict:
             self.dollar_limit = limit_dict.get('dollar_limit', 100000000)
             self.position_limit = limit_dict.get('position_limit', 100000)
+            self.leverage_target = limit_dict.get('leverage_target', 1)
 
     @property
     def LONG(self):
         if self.current_trade is not None:
-            p = self.current_trade['position']
-            if p > 0:
+            if self.current_trade['position'] > 0:
                 return True
         return False
 
     @property
     def SHORT(self):
         if self.current_trade is not None:
-            p = self.current_trade['position']
-            if p < 0:
+            if self.current_trade['position'] < 0:
                 return True
         return False
 
@@ -148,8 +148,7 @@ class BackTest():
             shares = int(trade_alloc/basis)
 
             if security.sec_type == SecType.FUTURE:
-                leverage_tgt = security.get('leverage_target')
-                if leverage_tgt:
+                if self.leverage_target:
                     tick_size = security.get('tick_size', 0)
                     tick_value = security.get('tick_value', 0)
 
@@ -158,7 +157,7 @@ class BackTest():
                     multiplier = tick_value / tick_size
 
                     ## buy contracts in accordance to desired leverage target
-                    shares = int((trade_alloc * leverage_tgt)/(price * multiplier))
+                    shares = int((trade_alloc * self.leverage_target)/(price * multiplier))
 
 
             ## limit total shares/contracts that can be traded
@@ -209,7 +208,6 @@ class BackTest():
                 m = anchor * (1-default)
 
         if self.SHORT:
-            anchor = self.low_marker.valueAt(0)
             if volatility is not None:
                 m = anchor + (volatility * multiplier)
             else:
@@ -221,7 +219,10 @@ class BackTest():
         ## calc stop based on percentage loss in equity
         pass
 
-    def update_stop(self, bar):
+
+    def trade_UPDATE(self, cur_dt, bar, ref_bar):
+        ## update stops, duration and any other trade specific rule at EOD
+
         if self.LONG:
             self.high_marker.push(bar['High'])
             self.stop_level = max(self.stop_level, self.calc_price_stop( self.high_marker.highest))
@@ -229,6 +230,8 @@ class BackTest():
         if self.SHORT:
             self.low_marker.push(bar['Low'])
             self.stop_level = min(self.stop_level, self.calc_price_stop( self.low_marker.lowest))
+
+        self.current_trade['Duration'] += 1
 
 
     def entry_OPEN(self, cur_dt, bar, ref_bar=None):
@@ -244,8 +247,9 @@ class BackTest():
             anchor_bar, bkout = self.anchor.valueAt(0)
             if bkout < 0 and end_of_week == False:
                 self.current_trade = self.enter_trade( TradeType.BUY, bar['Date'], self.security, bar['Open'], label='LEX' )
-                self.high_marker = HighestValue( bar['Open'] )
-                self.stop_level = self.calc_price_stop( self.high_marker.highest )
+                if self.LONG:
+                    self.high_marker = HighestValue( bar['Open'] )
+                    self.stop_level = self.calc_price_stop( self.high_marker.highest )
 
 
     def exit_OPEN(self, cur_dt, bar, ref_bar=None):
@@ -255,7 +259,7 @@ class BackTest():
         if self.FLAT:
             return
 
-        self.exit_trade( bar['Date'], security, bar['Open'] )
+        ## self.exit_trade( bar['Date'], security, bar['Open'] )
 
 
     def entry_CLOSE(self, cur_dt, bar, ref_bar=None):
@@ -265,6 +269,7 @@ class BackTest():
         if not self.FLAT:
             return
 
+        ## ADD entry_CLOSE SIGNAL LOGIC HERE
         ## self.current_trade = self.enter_trade( TradeType.BUY, bar['Date'], self.security, bar['Close'], label = "" )
 
 
@@ -287,7 +292,7 @@ class BackTest():
 
 
     ## position, %wallet and absolute dollar amount
-    ## adjustmetn function
+    ## adjustment functions
     ## called at the end fo every trade
 
     def update_position_limit(self):
@@ -313,7 +318,6 @@ class BackTest():
         trades_df = pandas.DataFrame(self.trades)
         pnl_series = pandas.DataFrame(self.trade_series)
 
-        dollars = trades_df['Value']
         wins = trades_df[ trades_df['Value'] > 0]
 
         trade_count = len(trades_df)
@@ -322,7 +326,6 @@ class BackTest():
         returns = (pnl_series['Equity'] / pnl_series['Equity'].shift(1)) - 1
         returns.dropna(inplace=True)
 
-        tf = trades_df[trades_df['Exit'] > 0]
         trade_returns = trades_df['TradeRtn'] 
 
         trade_wins = trade_returns[trade_returns >= 0]
@@ -346,7 +349,7 @@ class BackTest():
         cagr = ((pnl_series.iloc[-1]['Equity']/pnl_series.iloc[0]['Equity']) ** (1.0/years)) - 1
         sharpe = cagr/(returns.std() * math.sqrt(252))
 
-        self.results = dict(Sharpe=sharpe,
+        self.metrics = dict(Sharpe=sharpe,
                         CAGR=cagr,
                         MaxDD=dd,
                         Trades=trade_count,
@@ -358,21 +361,21 @@ class BackTest():
                         TotalRtn=totalRtn)
 
 
-    def dump_trades(self, fmt=DumpFormat.CSV):
+    def dump_trades(self, formats=[DumpFormat.CSV]):
         ## stdout, csv, html
         trades_df = pandas.DataFrame(self.trades)
-        if fmt == DumpFormat.CSV:
+        if DumpFormat.CSV in formats:
             trades_df.to_csv('trades.csv', index=False)
             
-    def dump_trade_series(self, fmt=DumpFormat.STDOUT):
+    def dump_trade_series(self, formats=[DumpFormat.STDOUT]):
         ## stdout, csv, html
         trade_series_df = pandas.DataFrame(self.trade_series)
         pnl_series_df = trade_series_df[['Date','Equity']]
-        if fmt == DumpFormat.CSV:
+        if DumpFormat.CSV in formats:
             trade_series_df.to_csv('trade_series.csv', index=False)
             pnl_series_df.to_csv('pnl_series.csv', index=False)
 
-        if fmt == DumpFormat.STDOUT:
+        if DumpFormat.STDOUT in formats:
             daily_table = PrettyTable(trade_series_df.columns.tolist())
             daily_table.align['MTM'] = "r"
             daily_table.align['Equity'] = "r"
@@ -380,23 +383,35 @@ class BackTest():
                 daily_table.add_row(row.tolist())
             print(daily_table)
 
-    def dump_metrics(self, fmt=DumpFormat.STDOUT):
+    def dump_metrics(self, formats=[DumpFormat.STDOUT]):
         ## stdout, html, and json
-        results_df = pandas.DataFrame([self.results])
-        results_df = results_df.T
-        results_df.reset_index(inplace = True)
-        results_df.rename(columns={'index':'Metric', 0:'Value'}, inplace=True)
+        metrics_df = pandas.DataFrame([self.metrics])
+        metrics_df = metrics_df.T
+        metrics_df.reset_index(inplace = True)
+        metrics_df.rename(columns={'index':'Metric', 0:'Value'}, inplace=True)
        
-        if fmt == DumpFormat.STDOUT:
-            daily_table = PrettyTable(results_df.columns.tolist())
+        if DumpFormat.STDOUT in formats:
+            daily_table = PrettyTable(metrics_df.columns.tolist())
             daily_table.align['Metric'] = "l"
             daily_table.align['Value'] = "r"
             daily_table.float_format['Value'] = ".3"
-            for i, row in results_df.iterrows():
+            for i, row in metrics_df.iterrows():
                 daily_table.add_row(row.tolist())
             print(daily_table)
-            
+
+    def results(self):
+        trades_df = pandas.DataFrame(self.trades)
+        trade_series_df = pandas.DataFrame(self.trade_series)
+        metrics_df = pandas.DataFrame([self.metrics])
+        metrics_df = metrics_df.T
+        metrics_df.reset_index(inplace = True)
+        metrics_df.rename(columns={'index':'Metric', 0:'Value'}, inplace=True)
+
+        return dict(Trades=trades_df,
+                    TradeSeries=trade_series_df,
+                    Metrics=metrics_df)
    
+
     def start_from(self, start_from_dt):
         if start_from_dt is not None:
             if isinstance(start_from_dt, date):
@@ -459,7 +474,7 @@ class BackTest():
 
     def run(self):
 
-        self.results = None
+        self.metrics = None
 
         # i = integer index
         # cur_dt = bar datetime = datetime.strptime(dt)
@@ -486,9 +501,9 @@ class BackTest():
             # hit the the start_from_dt trading date
 
             self.exit_CLOSE(cur_dt, bar, ref_bar)
+            self.trade_UPDATE(cur_dt, bar, ref_bar)
             self.entry_CLOSE(cur_dt, bar, ref_bar)
 
-            self.update_stop(bar)
 
             ## record trade info for the day.
             backtest_dict = self.record_backtest_data( bar )
@@ -505,10 +520,14 @@ class BackTest():
                 self.update_dollar_alloc()
                 self.update_dollar_limit()
 
+
+    def run_and_report(self):
+
+        self.run()
+
         self.generate_metrics()
 
-        for fmt in [DumpFormat.STDOUT, DumpFormat.CSV]:
-            self.dump_trade_series(fmt)
+        self.dump_trade_series(formats= [DumpFormat.STDOUT, DumpFormat.CSV])
         self.dump_metrics()
         self.dump_trades()
 

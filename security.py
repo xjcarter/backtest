@@ -40,6 +40,7 @@ class Security():
         self.load_data()
         self._bar_generator = self._create_bar_generator()
 
+    ## defaults to false in initialization 
     def use_raw(self, v=True):
         self._use_raw = v 
    
@@ -102,7 +103,6 @@ if __name__ == '__main__':
             "tick_size": 0.25,
             "tick_value": 12.50,
             "margin_requirement": 12000
-            "leverage_target": 4 
     }
     """
 
