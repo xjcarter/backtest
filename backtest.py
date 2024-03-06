@@ -454,7 +454,7 @@ class BackTest():
         row['MTM'] = _fstr( mtm)
         row['Equity'] = _fstr(self.wallet + mtm) 
 
-        return mtm, row
+        return row
 
 
     def run(self):
@@ -491,12 +491,12 @@ class BackTest():
             self.update_stop(bar)
 
             ## record trade info for the day.
-            mtm, backtest_dict = self.record_backtest_data( bar )
+            backtest_dict = self.record_backtest_data( bar )
             self.trade_series.append( backtest_dict )
 
             ## reset trade
             if self.current_trade.get('Exit'):
-                self.wallet += mtm 
+                self.wallet += backtest_dict['MTM'] 
                 self.current_trade = None
             
             if self.FLAT:
@@ -511,5 +511,4 @@ class BackTest():
             self.dump_trade_series(fmt)
         self.dump_metrics()
         self.dump_trades()
-
 
