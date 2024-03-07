@@ -1,9 +1,11 @@
 import pandas
+import json
 from datetime import date, datetime
 from prettytable import PrettyTable
 from indicators import StDev, MondayAnchor, HighestValue, LowestValue
 import calendar_calcs
 from security import SecType
+from df_html_fancy import backtest_table_to_html 
 
 class DumpFormat(str, Enum):
     STDOUT = 'STDOUT'
@@ -14,6 +16,8 @@ class DumpFormat(str, Enum):
 class TradeType(str, Enum):
     SELL = 'SELL'
     BUY = 'BUY'
+
+COLUMNS_TO_CENTER = 'Date InDate ExDate InSignal ExSignal'.split()
 
 class BackTest():
     def __init__(self, security, json_config, ref_index=None):
@@ -361,11 +365,29 @@ class BackTest():
                         TotalRtn=totalRtn)
 
 
+
     def dump_trades(self, formats=[DumpFormat.CSV]):
         ## stdout, csv, html
         trades_df = pandas.DataFrame(self.trades)
         if DumpFormat.CSV in formats:
             trades_df.to_csv('trades.csv', index=False)
+
+        if DumpFormat.STDOUT in formats:
+            col_list = trades_df.columns.tolist()
+            daily_table = PrettyTable(col_list)
+            for col in col_list:
+                if col in COLUMNS_TO_CENTER:
+                    daily_table.align[col] = "c"
+                else:
+                    daily_table.align[col] = "r"
+            for i, row in trades_df.iterrows():
+                daily_table.add_row(row.tolist())
+            print(daily_table)
+
+        if DumpFormat.HTML in formats:
+            html = backtest_table_to_html(trades_df, 'BackTest Trades')
+            with open('trades.html', 'w') as f:
+                f.write(html + '\n')
             
     def dump_trade_series(self, formats=[DumpFormat.STDOUT]):
         ## stdout, csv, html
@@ -376,12 +398,21 @@ class BackTest():
             pnl_series_df.to_csv('pnl_series.csv', index=False)
 
         if DumpFormat.STDOUT in formats:
-            daily_table = PrettyTable(trade_series_df.columns.tolist())
-            daily_table.align['MTM'] = "r"
-            daily_table.align['Equity'] = "r"
+            col_list = trade_series_df.columns.tolist()
+            daily_table = PrettyTable(col_list)
+            for col in col_list:
+                if col in COLUMNS_TO_CENTER:
+                    daily_table.align[col] = "c"
+                else:
+                    daily_table.align[col] = "r"
             for i, row in trade_series_df.iterrows():
                 daily_table.add_row(row.tolist())
             print(daily_table)
+
+        if DumpFormat.HTML in formats:
+            html = backtest_table_to_html(trades_series_df, 'Backtest Series')
+            with open('trades_series.html', 'w') as f:
+                f.write(html + '\n')
 
     def dump_metrics(self, formats=[DumpFormat.STDOUT]):
         ## stdout, html, and json
@@ -398,6 +429,18 @@ class BackTest():
             for i, row in metrics_df.iterrows():
                 daily_table.add_row(row.tolist())
             print(daily_table)
+
+        if DumpFormat.HTML in formats:
+            html = backtest_table_to_html(metrics_df, 'Backtest Metrics')
+            with open('metrics.html', 'w') as f:
+                f.write(html + '\n')
+
+        if DumpFormat.JSON in formats:
+            metrics_json = json.dumps(self.metrics, indent=4)
+            with open('metrics.json', 'w') as f:
+                f.write(metrics_json + '\n')
+
+
 
     def results(self):
         trades_df = pandas.DataFrame(self.trades)

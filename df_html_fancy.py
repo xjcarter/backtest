@@ -86,4 +86,8 @@ if __name__ == '__main__':
     new_html = backtest_table_to_html(df, 'Tester')
     print(new_html)
 
+    with open('tester.html', 'w') as f:
+        f.write(new_html + "\n")
+
+
 
