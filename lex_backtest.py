@@ -5,7 +5,7 @@ import calendar_calcs
 
 class LexBackTest(BackTest):
     def __init__(self, security, json_config, ref_index=None):
-        super.__init__(security, json_config, ref_index)
+        super().__init__(security, json_config, ref_index)
 
         ## needed indicators and tools
 
