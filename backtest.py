@@ -30,7 +30,8 @@ class BackTest():
                             {
                                 "StDev": 50,
                                 "ma200": 200,
-                                "duration": 10
+                                "duration": 10,
+                                "start_dete": "2014-01-01"
                             },
                         "wallet":
                             {
@@ -57,12 +58,13 @@ class BackTest():
             self._use_raw = use non adjusted prices
         """
 
-        ## turn on backtest
-        self.backtest_disabled = False
-        self.start_dt = None
-
         ## strategy settings 
         self.config = json_config
+
+        ## turn on backtest
+        self.backtest_disabled = False
+        self.start_dt = self.config.get("start_date")
+
         ## Security objects
         self.security = security  
         self.ref_index = ref_index 
@@ -254,7 +256,8 @@ class BackTest():
         if self.FLAT:
             return
 
-        ## self.exit_trade( bar['Date'], security, bar['Open'] )
+        ## if self.LONG:
+        ##    self.exit_trade( bar['Date'], security, bar['Open'] )
 
 
     def entry_CLOSE(self, cur_dt, bar, ref_bar=None):
@@ -275,7 +278,8 @@ class BackTest():
         if self.FLAT:
             return
 
-        ## self.exit_trade( bar['Date'], security, bar['Open'] )
+        ## if self.LONG:
+        ##    self.exit_trade( bar['Date'], security, bar['Open'] )
 
     ## position, %wallet and absolute dollar amount
     ## adjustment functions
@@ -436,7 +440,7 @@ class BackTest():
                     TradeSeries=trade_series_df,
                     Metrics=metrics_df)
    
-
+    ## start back-test from a specific date
     def start_from(self, start_from_dt):
         if start_from_dt is not None:
             if isinstance(start_from_dt, date):
@@ -497,7 +501,8 @@ class BackTest():
         return row
 
 
-    def calc_analytics(self, cur_dt, bar, ref_bar):
+    def calc_strategy_analytics(self, cur_dt, bar, ref_bar):
+        pass
 
         ## create all derived data and indicatirs here 
 
