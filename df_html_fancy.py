@@ -2,13 +2,20 @@
 from bs4 import BeautifulSoup
 
 
-def backtest_table_to_html(df, title):
+def backtest_table_to_html(df, title, black_and_white=False):
 
     ## table columns to center, 
     ## everthing else is right justified
     COLUMNS_TO_CENTER = 'Date InDate ExDate InSignal ExSignal'.split()
-    HARD_BLUE = '#0E2A52'
-    SOFT_BLUE = '#315BA5'
+
+    if black_and_white:
+        HARD_COLOR = '#282A2D'
+        SOFT_COLOR = '#5C5E5F'
+    else:
+        # Hannibal Blues...
+        HARD_COLOR = '#0E2A52'
+        SOFT_COLOR = '#315BA5'
+
     INDENT = '&nbsp;' * 2 
 
     # Convert the DataFrame to an HTML string with no border
@@ -18,7 +25,7 @@ def backtest_table_to_html(df, title):
     soup = BeautifulSoup(html_string, 'html.parser')
 
     # Add the title above the table with the specified styles
-    title_html = f'<div style="text-align: center; color: {HARD_BLUE}; font-family: Verdana;'
+    title_html = f'<div style="text-align: center; color: {HARD_COLOR}; font-family: Verdana;'
     title_html += f'font-size: 16pt; border: none; text-align: left;'
     title_html += f'margin-top: 20px; margin-bottom: 20px;">{INDENT}{title}</div>'
     title_soup = BeautifulSoup(title_html, 'html.parser')
@@ -32,7 +39,7 @@ def backtest_table_to_html(df, title):
         for th in header_row.find_all('th'):
             #th_style = 'font-family: Helvetica; font-size: 14pt; font-weight: bold; padding: 5px;'
             th_style = 'font-family: Verdana; font-size: 11pt; padding: 8px;'
-            th_style += f'background-color: {HARD_BLUE}; color: white;'
+            th_style += f'background-color: {HARD_COLOR}; color: white;'
             if th.text in COLUMNS_TO_CENTER:  
                 th_style += 'text-align: center;'
             else:
@@ -47,9 +54,9 @@ def backtest_table_to_html(df, title):
             #td_style = 'padding: 5px; font-family: Courier New; font-size: 14pt;'
             td_style = 'padding: 5px; font-family: Verdana; font-size: 12pt;'
             if index % 2 == 0:  # Style even rows differently
-                td_style += f'background-color: {SOFT_BLUE}; color: white;'
+                td_style += f'background-color: {SOFT_COLOR}; color: white;'
             else:
-                td_style += f'background-color: white; color: {HARD_BLUE};'
+                td_style += f'background-color: white; color: {HARD_COLOR};'
           
             for col_name in df.columns.tolist():
                 if col_name in COLUMNS_TO_CENTER:
@@ -83,7 +90,7 @@ if __name__ == '__main__':
         tbl.append(m)
 
     df = pandas.DataFrame(tbl)
-    new_html = backtest_table_to_html(df, 'Tester')
+    new_html = backtest_table_to_html(df, 'Tester', True)
     print(new_html)
 
     with open('tester.html', 'w') as f:
