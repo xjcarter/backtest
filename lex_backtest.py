@@ -4,7 +4,10 @@ import calendar_calcs
 
 
 class LexBackTest(BackTest):
-        ## indicators and tools
+    def __init__(self, security, json_config, ref_index=None):
+        super.__init__(security, json_config, ref_index)
+
+        ## needed indicators and tools
 
         self.stdev = StDev( sample_size= self.config.get('StDev', 50) )
         self.anchor = MondayAnchor(derived_len=20)
