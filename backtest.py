@@ -244,17 +244,8 @@ class BackTest():
 
         if not self.FLAT:
             return
-
-        end_of_week = calendar_calcs.is_end_of_week(cur_dt, self.holidays)
-
-        if self.anchor.count() > 0:
-            anchor_bar, bkout = self.anchor.valueAt(0)
-            if bkout < 0 and end_of_week == False:
-                self.current_trade = self.enter_trade( TradeType.BUY, bar['Date'], self.security, bar['Open'], label='LEX' )
-                if self.LONG:
-                    self.high_marker = HighestValue( bar['Open'] )
-                    self.stop_level = self.calc_price_stop( self.high_marker.highest )
-
+        
+        # self.enter_trade( TradeType.BUY, bar['Date'], self.security, bar['Open'], label='LEX' )
 
     def exit_OPEN(self, cur_dt, bar, ref_bar=None):
         if self.backtest_disabled:
@@ -284,16 +275,7 @@ class BackTest():
         if self.FLAT:
             return
 
-        pnl = bar['Close'] - self.current_trade['Entry']
-        if pnl > 0:
-            self.exit_trade( bar['Date'], security, bar['Close'], label='PNL' )
-
-        elif self.current_trade['Duration'] > self.config['duration']:
-            self.exit_trade( bar['Date'], security, bar['Close'], label='EXPIRY' )
-
-        elif self.current_trade['Close'] <= self.stop_level:
-            self.exit_trade( bar['Date'], security, bar['Close'], label='STOP_OUT' )
-
+        ## self.exit_trade( bar['Date'], security, bar['Open'] )
 
     ## position, %wallet and absolute dollar amount
     ## adjustment functions
@@ -515,6 +497,11 @@ class BackTest():
         return row
 
 
+    def calc_analytics(self, cur_dt, bar, ref_bar):
+
+        ## create all derived data and indicatirs here 
+
+
     def run(self):
 
         self.metrics = None
@@ -537,8 +524,8 @@ class BackTest():
 
             ## do analytics here
 
-            self.anchor.push((cur_dt, bar))
-            self.stdev.push(bar['Close'])
+            calc_analytics(cur_dt, bar, ref_bar )
+
 
             # collect all analytics, but don't start trading until we
             # hit the the start_from_dt trading date
