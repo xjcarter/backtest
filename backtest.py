@@ -103,16 +103,16 @@ class BackTest():
     def _initialize_wallet(self):
         wallet_dict = self.config.get('wallet')
         if wallet_dict:
-            self.wallet = wallet_dict.get('cash', 10000)
-            self.wallet_alloc_pct = wallet_dict.get('wallet_alloc_pct', 1)
-            self.borrow_margin_pct = wallet_dict.get('borrow_margin_pct', 1)
+            self.wallet = float( wallet_dict.get('cash', 10000) )
+            self.wallet_alloc_pct = float( wallet_dict.get('wallet_alloc_pct', 1) )
+            self.borrow_margin_pct = float( wallet_dict.get('borrow_margin_pct', 1) )
 
     def _initialize_limits(self):
         limit_dict = self.config.get('trading_limits')
         if limit_dict:
-            self.dollar_limit = limit_dict.get('dollar_limit', 100000000)
-            self.position_limit = limit_dict.get('position_limit', 100000)
-            self.leverage_target = limit_dict.get('leverage_target', 1)
+            self.dollar_limit = float( limit_dict.get('dollar_limit', 100000000) )
+            self.position_limit = int( limit_dict.get('position_limit', 100000) )
+            self.leverage_target = float( limit_dict.get('leverage_target', 1) )
 
     @property
     def LONG(self):
@@ -575,7 +575,7 @@ class BackTest():
 
             ## reset trade
             if self.CLOSED:
-                self.wallet += backtest_dict['MTM'] 
+                self.wallet += float( backtest_dict['MTM'] )
                 self.current_trade = None
             
             if self.FLAT:

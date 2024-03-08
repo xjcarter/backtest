@@ -10,9 +10,12 @@ class LexBackTest(BackTest):
 
         ## needed indicators and tools
 
-        self.stdev = StDev( sample_size= self.config.get('StDev', 50) )
+        self.settings = self.config.get('settings')
+
+        self.stdev = StDev( sample_size= self.settings.get('StDev', 50) )
         self.anchor = MondayAnchor(derived_len=20)
         self.holidays = calendar_calcs.load_holidays()
+
 
 
     def calc_strategy_analytics(self, cur_dt, bar, ref_bar):
@@ -63,7 +66,7 @@ class LexBackTest(BackTest):
             if pnl > 0:
                 self.exit_trade( bar['Date'], self.security, bar['Close'], label='PNL' )
 
-            elif self.current_trade['Duration'] > self.config['duration']:
+            elif self.current_trade['Duration'] > self.settings['duration']:
                 self.exit_trade( bar['Date'], self.security, bar['Close'], label='EXPIRY' )
 
             elif self.current_trade['Close'] <= self.current_trade['StopLevel']:
