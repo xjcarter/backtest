@@ -108,10 +108,23 @@ if __name__ == '__main__':
 
     spy = Security(etf_def)
 
+    """
+    ## NOTE: you can't use generators in a for loop
     i = 0
     while i < 3:
         i, dtt, row  = spy.next_bar()
         print(i, dtt, row)
+    """
+
+    while True:
+        try:
+            i, dtt, row = spy.next_bar()
+        except StopIteration:
+            break
+    ## print the last row
+    print(i, dtt, row)
+
+
 
     v = spy.fetch_bar("2008-10-14")
     ## just prints out the unpacked tuple

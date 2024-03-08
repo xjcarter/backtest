@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from indicators import StDev, MondayAnchor
+from backtest import BackTest, TradeType, DumpFormat
 import calendar_calcs
 
 
@@ -45,8 +46,8 @@ class LexBackTest(BackTest):
             if bkout < 0 and end_of_week == False:
                 self.current_trade = self.enter_trade( TradeType.BUY, bar['Date'], self.security, bar['Open'], label='LEX' )
                 if self.LONG:
-                    self.high_marker = HighestValue( bar['Open'] )
-                    self.stop_level = self.calc_price_stop( self.high_marker.highest )
+                    initial_stop = self.initialize_stop(anchor= bar['Open'])
+                    self.current_trade['StopLevel'] = self.calc_price_stop( initial_stop.highest )
 
 
     def exit_CLOSE(self, cur_dt, bar, ref_bar=None):
@@ -60,13 +61,13 @@ class LexBackTest(BackTest):
 
             pnl = bar['Close'] - self.current_trade['Entry']
             if pnl > 0:
-                self.exit_trade( bar['Date'], security, bar['Close'], label='PNL' )
+                self.exit_trade( bar['Date'], self.security, bar['Close'], label='PNL' )
 
             elif self.current_trade['Duration'] > self.config['duration']:
-                self.exit_trade( bar['Date'], security, bar['Close'], label='EXPIRY' )
+                self.exit_trade( bar['Date'], self.security, bar['Close'], label='EXPIRY' )
 
-            elif self.current_trade['Close'] <= self.stop_level:
-                self.exit_trade( bar['Date'], security, bar['Close'], label='STOP_OUT' )
+            elif self.current_trade['Close'] <= self.current_trade['StopLevel']:
+                self.exit_trade( bar['Date'], self.security, bar['Close'], label='STOP_OUT' )
 
 
     def entry_CLOSE(self, cur_dt, bar, ref_bar=None):
@@ -78,3 +79,23 @@ class LexBackTest(BackTest):
 
         ## ADD entry_CLOSE SIGNAL LOGIC HERE
         ## self.current_trade = self.enter_trade( TradeType.BUY, bar['Date'], self.security, bar['Close'], label = "" )
+
+
+    ## position, %wallet and absolute dollar amount
+    ## adjustment functions
+    ## called at the end fo every trade
+
+    def update_position_limit(self):
+        ## updates self.position_limit
+        ## based on custom, strategy specific logic
+        pass
+
+    def update_wallet_alloc(self):
+        ## updates self.wallet_alloc_pct
+        ## based on custom, strategy specific logic
+        pass
+
+    def update_dollar_limit(self):
+        ## updates self.dollar_limit
+        ## based on custom, strategy specific logic
+        pass

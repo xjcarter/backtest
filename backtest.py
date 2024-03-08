@@ -1,6 +1,7 @@
 import pandas
 import json
 from datetime import date, datetime
+from enum import Enum
 from prettytable import PrettyTable
 from indicators import StDev, MondayAnchor, HighestValue, LowestValue
 import calendar_calcs
@@ -116,15 +117,22 @@ class BackTest():
     @property
     def LONG(self):
         if self.current_trade is not None:
-            if self.current_trade['position'] > 0:
+            if self.current_trade['Position'] > 0:
                 return True
         return False
 
     @property
     def SHORT(self):
         if self.current_trade is not None:
-            if self.current_trade['position'] < 0:
+            if self.current_trade['Position'] < 0:
                 return True
+        return False
+
+    @property
+    def CLOSED(self):
+        ## trade state BEFORE self.current_trade is reset to None
+        if self.current_trade and self.current_trade.get('Exit'):
+            return True
         return False
 
     @property
@@ -155,8 +163,8 @@ class BackTest():
 
             if security.sec_type == SecType.FUTURE:
                 if self.leverage_target:
-                    tick_size = security.get('tick_size', 0)
-                    tick_value = security.get('tick_value', 0)
+                    tick_size = security.tick_size
+                    tick_value = security.tick_value
 
                     assert(tick_size > 0)
                     assert(tick_value > 0)
@@ -184,8 +192,8 @@ class BackTest():
             return {key: dikt[key] for key in keys_order if key in dikt}
 
         exit_dt = str_dt
-        tick_size = security.get('tick_size', 0)
-        tick_value = security.get('tick_value', 0)
+        tick_size = security.tick_size
+        tick_value = security.tick_value
 
         assert(tick_size > 0)
         assert(tick_value > 0)
@@ -201,6 +209,20 @@ class BackTest():
 
         dict_order = 'InDate ExDate Position Duration InSignal Entry ExSignal Exit DollarBase Value TradeRtn PNL'
         self.trades.append( _reorder_keys(self.current_trade, dict_order.split()) )
+
+
+    def initialize_stop(self, anchor):
+
+        initial_stop = None
+        if self.LONG:
+            initial_stop = self.high_marker = HighestValue(anchor)
+            self.low_marker = None
+
+        if self.SHORT:
+            self.high_marker = None 
+            initial_stop = self.low_marker = LowestValue(anchor) 
+    
+        return initial_stop
 
 
     def calc_price_stop(self, anchor, multiplier=2.5, default=0.30):
@@ -226,18 +248,21 @@ class BackTest():
         pass
 
 
-    def trade_UPDATE(self, cur_dt, bar, ref_bar):
+    def trade_update(self, cur_dt, bar, ref_bar):
         ## update stops, duration and any other trade specific rule at EOD
 
         if self.LONG:
             self.high_marker.push(bar['High'])
-            self.stop_level = max(self.stop_level, self.calc_price_stop( self.high_marker.highest))
+            stop_level = self.current_trade['StopLevel']
+            self.current_trade['StopLevel'] = max(stop_level, self.calc_price_stop( self.high_marker.highest))
 
         if self.SHORT:
             self.low_marker.push(bar['Low'])
-            self.stop_level = min(self.stop_level, self.calc_price_stop( self.low_marker.lowest))
+            stop_level = self.current_trade['StopLevel']
+            self.current_trade['StopLevel'] = min(stop_level, self.calc_price_stop( self.low_marker.lowest))
 
-        self.current_trade['Duration'] += 1
+        if not self.FLAT:
+            self.current_trade['Duration'] += 1
 
 
     def entry_OPEN(self, cur_dt, bar, ref_bar=None):
@@ -449,8 +474,8 @@ class BackTest():
                 self.start_dt = datetime.strptime(start_from_dt,"%Y-%m-%d").date()
 
     def mark_to_market(self, mark_price):
-        tick_size = self.security['tick_size']
-        tick_value = self.security['tick_value']
+        tick_size = self.security.tick_size
+        tick_value = self.security.tick_value
         m = tick_value/tick_size
 
         return m * (mark_price - self.current_trade['Entry']) * self.current_trade['Position']
@@ -514,7 +539,11 @@ class BackTest():
         # i = integer index
         # cur_dt = bar datetime = datetime.strptime(dt)
         # bar = OHLC, etc data.
-        for i, cur_dt, bar in self.security.next_bar():
+        while True:
+            try:
+                i, cur_dt, bar = self.security.next_bar()
+            except StopIteration:
+                break
 
             self.backtest_disabled = False
             if self.start_dt and cur_dt < self.start_dt:
@@ -529,14 +558,14 @@ class BackTest():
 
             ## do analytics here
 
-            calc_analytics(cur_dt, bar, ref_bar )
+            self.calc_strategy_analytics(cur_dt, bar, ref_bar )
 
 
             # collect all analytics, but don't start trading until we
             # hit the the start_from_dt trading date
 
             self.exit_CLOSE(cur_dt, bar, ref_bar)
-            self.trade_UPDATE(cur_dt, bar, ref_bar)
+            self.trade_update(cur_dt, bar, ref_bar)
             self.entry_CLOSE(cur_dt, bar, ref_bar)
 
 
@@ -545,14 +574,14 @@ class BackTest():
             self.trade_series.append( backtest_dict )
 
             ## reset trade
-            if self.current_trade.get('Exit'):
+            if self.CLOSED:
                 self.wallet += backtest_dict['MTM'] 
                 self.current_trade = None
             
             if self.FLAT:
                 self.high_marker = self.low_marker = None
                 self.update_position_limit()
-                self.update_dollar_alloc()
+                self.update_wallet_alloc()
                 self.update_dollar_limit()
 
 
