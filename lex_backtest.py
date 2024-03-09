@@ -69,7 +69,7 @@ class LexBackTest(BackTest):
             elif self.current_trade['Duration'] > self.settings['duration']:
                 self.exit_trade( bar['Date'], self.security, bar['Close'], label='EXPIRY' )
 
-            elif self.current_trade['Close'] <= self.current_trade['StopLevel']:
+            elif bar['Close'] <= self.current_trade['StopLevel']:
                 self.exit_trade( bar['Date'], self.security, bar['Close'], label='STOP_OUT' )
 
 

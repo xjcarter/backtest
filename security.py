@@ -102,7 +102,7 @@ if __name__ == '__main__':
             "sec_type": "FUTURE",
             "tick_size": 0.25,
             "tick_value": 12.50,
-            "margin_requirement": 12000
+            "margin_req": 12000
     }
     """
 
