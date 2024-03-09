@@ -1,5 +1,6 @@
 import pandas
 import json
+import math
 from datetime import date, datetime
 from enum import Enum
 from prettytable import PrettyTable
@@ -18,7 +19,6 @@ class TradeType(str, Enum):
     SELL = 'SELL'
     BUY = 'BUY'
 
-COLUMNS_TO_CENTER = 'Date InDate ExDate InSignal ExSignal'.split()
 
 class BackTest():
     def __init__(self, security, json_config, ref_index=None):
@@ -376,26 +376,71 @@ class BackTest():
                         TotalRtn=totalRtn)
 
 
+    def format_df(self, lst_dicts):
+        def _fstr(value):
+            if value is None:
+                return ""
+
+            v = round(value, 3)
+            q = round(value, 2)
+            if v == q:
+                return str(q)
+            return str(v)
+
+        def _istr(value):
+            if value is None:
+                return ""
+
+            return str(value)
+
+        def _format(dikt):
+            float_fields = 'Entry Exit StopLevel MTM Equity DollarBase Value TradeRtn PNL'.split()
+            int_fields = 'Position Duration'.split()
+            for k in dikt.keys():
+                if k in float_fields: dikt[k] = _fstr(dikt[k])
+                if k in int_fields: dikt[k] = _istr(dikt[k])
+            return dikt
+
+        formatted_list = []
+        for dikt in lst_dicts:
+            formatted_list.append(_format(dikt))
+
+        df = pandas.DataFrame(formatted_list)
+        df = df.fillna("")
+        return df
+
+    def format_table(self, pretty_table):
+        COLUMNS_TO_CENTER = 'Date InDate ExDate InSignal ExSignal'.split()
+        float_fields = 'Close Entry Exit StopLevel MTM Equity'.split()
+
+        new_table = pretty_table.copy()
+        for col in pretty_table.field_names:
+            new_table.float_format[col] = ".2"
+            new_table.align[col] = "r"
+            if col in COLUMNS_TO_CENTER:
+                new_table.align[col] = "c"
+
+        return new_table 
+
 
     def dump_trades(self, formats=[DumpFormat.CSV]):
         ## stdout, csv, html
         trades_df = pandas.DataFrame(self.trades)
         if DumpFormat.CSV in formats:
+            trades_df = trades_df.round(4)
             trades_df.to_csv('trades.csv', index=False)
 
         if DumpFormat.STDOUT in formats:
+            trades_df = trades_df.fillna("")
             col_list = trades_df.columns.tolist()
             daily_table = PrettyTable(col_list)
-            for col in col_list:
-                if col in COLUMNS_TO_CENTER:
-                    daily_table.align[col] = "c"
-                else:
-                    daily_table.align[col] = "r"
+            daily_table = self.format_table(daily_table)
             for i, row in trades_df.iterrows():
                 daily_table.add_row(row.tolist())
             print(daily_table)
 
         if DumpFormat.HTML in formats:
+            trades_df = self.format_df(self.trades)
             html = backtest_table_to_html(trades_df, 'BackTest Trades')
             with open('trades.html', 'w') as f:
                 f.write(html + '\n')
@@ -403,24 +448,23 @@ class BackTest():
     def dump_trade_series(self, formats=[DumpFormat.STDOUT]):
         ## stdout, csv, html
         trade_series_df = pandas.DataFrame(self.trade_series)
+        trade_series_df = trade_series_df.round(4)
         pnl_series_df = trade_series_df[['Date','Equity']]
         if DumpFormat.CSV in formats:
             trade_series_df.to_csv('trade_series.csv', index=False)
             pnl_series_df.to_csv('pnl_series.csv', index=False)
 
         if DumpFormat.STDOUT in formats:
+            trade_series_df = trade_series_df.fillna("")
             col_list = trade_series_df.columns.tolist()
             daily_table = PrettyTable(col_list)
-            for col in col_list:
-                if col in COLUMNS_TO_CENTER:
-                    daily_table.align[col] = "c"
-                else:
-                    daily_table.align[col] = "r"
+            daily_table = self.format_table(daily_table)
             for i, row in trade_series_df.iterrows():
                 daily_table.add_row(row.tolist())
             print(daily_table)
 
         if DumpFormat.HTML in formats:
+            trades_series_df = self.format_df(self.trade_series)
             html = backtest_table_to_html(trades_series_df, 'Backtest Series')
             with open('trades_series.html', 'w') as f:
                 f.write(html + '\n')
@@ -442,6 +486,7 @@ class BackTest():
             print(daily_table)
 
         if DumpFormat.HTML in formats:
+            metrics_df = self.format_df(metrics_df)
             html = backtest_table_to_html(metrics_df, 'Backtest Metrics')
             with open('metrics.html', 'w') as f:
                 f.write(html + '\n')
@@ -477,51 +522,41 @@ class BackTest():
         tick_size = self.security.tick_size
         tick_value = self.security.tick_value
         m = tick_value/tick_size
-
+    
         return m * (mark_price - self.current_trade['Entry']) * self.current_trade['Position']
        
     def record_backtest_data(self, bar):
-
-        def _fstr(value):
-            v = round(value, 3)
-            q = round(value, 2)
-            if v == q:
-                return str(q)
-            return str(v)
-
-        def _istr(value):
-            return str(value)
 
         row = dict( 
                 Date=bar['Date'],
                 Close=bar['Close'],
                 InSignal="",
-                Entry="",
+                Entry=None,
                 ExSignal="",
-                Exit="",
-                Position="",
-                StopLevel="",
-                MTM= "",
-                Equity=""
+                Exit=None,
+                Position=None,
+                StopLevel=None,
+                MTM= None,
+                Equity=None
             ) 
 
-        mtm = 0
+        mtm = 0 
         if not self.FLAT:
             if bar['Date'] == self.current_trade['InDate']:
                 row['InSignal'] = self.current_trade['InSignal']
-                row['Entry'] = _fstr(self.current_trade['Entry'])
+                row['Entry'] = self.current_trade['Entry']
 
-            row['Position'] = _istr(self.current_trade['Position'])
-            row['StopLevel'] = _fstr(self.current_trade['StopLevel'])
+            row['Position'] = self.current_trade['Position']
+            row['StopLevel'] = self.current_trade['StopLevel']
 
             if bar['Date'] == self.current_trade.get('ExDate'):
                 row['ExSignal'] = self.current_trade['ExSignal']
-                row['Exit'] = _fstr(self.current_trade['Exit'])
+                row['Exit'] = self.current_trade['Exit']
 
             mtm = self.mark_to_market( bar['Close']) 
 
-        row['MTM'] = _fstr( mtm)
-        row['Equity'] = _fstr(self.wallet + mtm) 
+        row['MTM'] =  mtm
+        row['Equity'] = self.wallet + mtm 
 
         return row
 
@@ -575,7 +610,7 @@ class BackTest():
 
             ## reset trade
             if self.CLOSED:
-                self.wallet += float( backtest_dict['MTM'] )
+                self.wallet += backtest_dict['MTM']
                 self.current_trade = None
             
             if self.FLAT:
