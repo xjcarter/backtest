@@ -411,7 +411,8 @@ class BackTest():
 
     def format_table(self, pretty_table):
         COLUMNS_TO_CENTER = 'Date InDate ExDate InSignal ExSignal'.split()
-        float_fields = 'Close Entry Exit StopLevel MTM Equity'.split()
+        #float_fields = 'Close Entry Exit StopLevel MTM Equity'.split()
+        float_fields = 'Close Entry Exit StopLevel'.split()
 
         new_table = pretty_table.copy()
         for col in pretty_table.field_names:
@@ -419,6 +420,8 @@ class BackTest():
             new_table.align[col] = "r"
             if col in COLUMNS_TO_CENTER:
                 new_table.align[col] = "c"
+            if col == 'Position':
+                new_table.float_format[col] = ".0" 
 
         return new_table 
 
@@ -456,6 +459,9 @@ class BackTest():
 
         if DumpFormat.STDOUT in formats:
             trade_series_df = trade_series_df.fillna("")
+            trade_series_df['MTM'] = trade_series_df['MTM'].replace(0,"")
+            #trade_series_df['MTM'] = trade_series_df['MTM'].map(lambda x:f'{x:,.2f}')
+            #trade_series_df['Equity'] = trade_series_df['Equity'].map(lambda x:f'{x:,.2f}')
             col_list = trade_series_df.columns.tolist()
             daily_table = PrettyTable(col_list)
             daily_table = self.format_table(daily_table)
