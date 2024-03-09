@@ -153,13 +153,15 @@ class BackTest():
             ## allocate based on margin requirment per contact.
             ## otherwise it would be share price
             basis = security.margin_req
+            
 
         if self.wallet > 0:
             assert(basis > 0)
             ## 1. get the cash allocated to the trade
             ## 2. then borrow on that allocation if borrow margin pct is given.
-            trade_alloc = (self.wallet_alloc_pct * self.wallet)/self.borrow_margin_pct
-            shares = int(trade_alloc/basis)
+            dollar_base = self.wallet_alloc_pct * self.wallet
+            buying_power = dollar_base/self.borrow_margin_pct
+            shares = int(buying_power/basis)
 
             if security.sec_type == SecType.FUTURE:
                 if self.leverage_target:
@@ -171,7 +173,7 @@ class BackTest():
                     multiplier = tick_value / tick_size
 
                     ## buy contracts in accordance to desired leverage target
-                    shares = int((trade_alloc * self.leverage_target)/(price * multiplier))
+                    shares = int((buying_power * self.leverage_target)/(price * multiplier))
 
 
             ## limit total shares/contracts that can be traded
@@ -179,7 +181,6 @@ class BackTest():
                 shares = min(shares, self.position_limit)
 
         if shares > 0:
-            dollar_base = shares * basis
             if trade_type == TradeType.SELL:
                 shares = -shares
 
