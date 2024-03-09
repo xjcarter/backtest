@@ -1,14 +1,14 @@
 from lex_backtest import LexBackTest, DumpFormat
 from security import Security
 
-upro_def = {
-    "symbol": "UPRO",
+spy_def = {
+    "symbol": "SPY",
     "sec_type": "ETF",
     "tick_size": 0.01,
     "tick_value": 0.01
 }
 
-upro = Security(upro_def)
+spy = Security(spy_def)
 
 lex_config = {
     "settings":
@@ -21,7 +21,7 @@ lex_config = {
         {
             "cash": 10000,
             "wallet_alloc_pct": 1,
-            "borrow_margin_pct": 1
+            "borrow_margin_pct": 0.34 
         },
     "trading_limits":
         {
@@ -31,6 +31,6 @@ lex_config = {
         }
 }
 
-lex = LexBackTest(upro, lex_config)
+lex = LexBackTest(spy, lex_config)
 lex.run_and_report()
 #lex.dump_trades(formats=[DumpFormat.STDOUT])
