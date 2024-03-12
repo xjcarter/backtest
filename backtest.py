@@ -12,6 +12,7 @@ from df_html_fancy import backtest_table_to_html
 class DumpFormat(str, Enum):
     STDOUT = 'STDOUT'
     HTML = 'HTML'
+    BW_HTML = 'BW_HTNL'
     JSON = 'JSON'
     CSV = 'CSV'
 
@@ -449,6 +450,12 @@ class BackTest():
             with open('trades.html', 'w') as f:
                 f.write(html + '\n')
             
+        if DumpFormat.BW_HTML in formats:
+            trades_df = self.format_df(self.trades)
+            html = backtest_table_to_html(trades_df, 'BackTest Trades', black_and_white=True)
+            with open('trades.html', 'w') as f:
+                f.write(html + '\n')
+
     def dump_trade_series(self, formats=[DumpFormat.STDOUT]):
         ## stdout, csv, html
         trade_series_df = pandas.DataFrame(self.trade_series)
@@ -476,13 +483,28 @@ class BackTest():
             with open('trades_series.html', 'w') as f:
                 f.write(html + '\n')
 
-    def dump_metrics(self, formats=[DumpFormat.STDOUT]):
+        if DumpFormat.BW_HTML in formats:
+            trades_series_df = self.format_df(self.trade_series)
+            html = backtest_table_to_html(trades_series_df, 'Backtest Series', black_and_white=True)
+            with open('trades_series.html', 'w') as f:
+                f.write(html + '\n')
+
+    def dump_metrics(self, formats=[DumpFormat.STDOUT], transpose=False, value_list=None, title=None):
         ## stdout, html, and json
         metrics_df = pandas.DataFrame([self.metrics])
-        metrics_df = metrics_df.T
-        metrics_df.reset_index(inplace = True)
-        metrics_df.rename(columns={'index':'Metric', 0:'Value'}, inplace=True)
-       
+        if value_list:
+            metrics_df = metrics_df[value_list]
+        metrics_df = metrics_df.round(3)
+
+        ttl = 'BackTest Metrics'
+        if title: ttl = title
+
+        if transpose:
+            #metrics_df = self.format_df(metrics_df)
+            metrics_df = metrics_df.T
+            metrics_df.reset_index(inplace = True)
+            metrics_df.rename(columns={'index':'Metric', 0:'Value'}, inplace=True)
+           
         if DumpFormat.STDOUT in formats:
             daily_table = PrettyTable(metrics_df.columns.tolist())
             daily_table.align['Metric'] = "l"
@@ -493,13 +515,18 @@ class BackTest():
             print(daily_table)
 
         if DumpFormat.HTML in formats:
-            metrics_df = self.format_df(metrics_df)
-            html = backtest_table_to_html(metrics_df, 'Backtest Metrics')
+            html = backtest_table_to_html(metrics_df, ttl)
+            with open('metrics.html', 'w') as f:
+                f.write(html + '\n')
+
+        if DumpFormat.BW_HTML in formats:
+            html = backtest_table_to_html(metrics_df, ttl, black_and_white=True)
             with open('metrics.html', 'w') as f:
                 f.write(html + '\n')
 
         if DumpFormat.JSON in formats:
-            metrics_json = json.dumps(self.metrics, indent=4)
+            formatted_metrics = { k: round(v,4) for k,v in self.metrics.items() }
+            metrics_json = json.dumps(formatted_metrics, indent=4)
             with open('metrics.json', 'w') as f:
                 f.write(metrics_json + '\n')
 
