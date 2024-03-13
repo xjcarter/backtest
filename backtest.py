@@ -7,12 +7,11 @@ from prettytable import PrettyTable
 from indicators import StDev, MondayAnchor, HighestValue, LowestValue
 import calendar_calcs
 from security import SecType
-from df_html_fancy import backtest_table_to_html 
+from df_html_fancy import basic_table_to_html 
 
 class DumpFormat(str, Enum):
     STDOUT = 'STDOUT'
     HTML = 'HTML'
-    BW_HTML = 'BW_HTNL'
     JSON = 'JSON'
     CSV = 'CSV'
 
@@ -446,15 +445,10 @@ class BackTest():
 
         if DumpFormat.HTML in formats:
             trades_df = self.format_df(self.trades)
-            html = backtest_table_to_html(trades_df, 'BackTest Trades')
+            html = basic_table_to_html(trades_df, 'BackTest Trades')
             with open('trades.html', 'w') as f:
                 f.write(html + '\n')
             
-        if DumpFormat.BW_HTML in formats:
-            trades_df = self.format_df(self.trades)
-            html = backtest_table_to_html(trades_df, 'BackTest Trades', black_and_white=True)
-            with open('trades.html', 'w') as f:
-                f.write(html + '\n')
 
     def dump_trade_series(self, formats=[DumpFormat.STDOUT]):
         ## stdout, csv, html
@@ -479,15 +473,10 @@ class BackTest():
 
         if DumpFormat.HTML in formats:
             trades_series_df = self.format_df(self.trade_series)
-            html = backtest_table_to_html(trades_series_df, 'Backtest Series')
+            html = basic_table_to_html(trades_series_df, 'Backtest Series')
             with open('trades_series.html', 'w') as f:
                 f.write(html + '\n')
 
-        if DumpFormat.BW_HTML in formats:
-            trades_series_df = self.format_df(self.trade_series)
-            html = backtest_table_to_html(trades_series_df, 'Backtest Series', black_and_white=True)
-            with open('trades_series.html', 'w') as f:
-                f.write(html + '\n')
 
     def dump_metrics(self, formats=[DumpFormat.STDOUT], transpose=False, value_list=None, title=None):
         ## stdout, html, and json
@@ -515,12 +504,7 @@ class BackTest():
             print(daily_table)
 
         if DumpFormat.HTML in formats:
-            html = backtest_table_to_html(metrics_df, ttl)
-            with open('metrics.html', 'w') as f:
-                f.write(html + '\n')
-
-        if DumpFormat.BW_HTML in formats:
-            html = backtest_table_to_html(metrics_df, ttl, black_and_white=True)
+            html = basic_table_to_html(metrics_df, ttl)
             with open('metrics.html', 'w') as f:
                 f.write(html + '\n')
 
@@ -661,6 +645,6 @@ class BackTest():
         self.generate_metrics()
 
         self.dump_trade_series(formats= [DumpFormat.STDOUT, DumpFormat.CSV])
-        self.dump_metrics()
+        self.dump_metrics(transpose=True)
         self.dump_trades()
 
