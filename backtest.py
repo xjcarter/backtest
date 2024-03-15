@@ -262,8 +262,6 @@ class BackTest():
             stop_level = self.current_trade['StopLevel']
             self.current_trade['StopLevel'] = min(stop_level, self.calc_price_stop( self.low_marker.lowest))
 
-        if not self.FLAT:
-            self.current_trade['Duration'] += 1
 
 
     def entry_OPEN(self, cur_dt, bar, ref_bar=None):
@@ -485,7 +483,7 @@ class BackTest():
             metrics_df = metrics_df[value_list]
         metrics_df = metrics_df.round(3)
 
-        ttl = 'BackTest Metrics'
+        ttl = ' '
         if title: ttl = title
 
         if transpose:
@@ -616,6 +614,11 @@ class BackTest():
 
             # collect all analytics, but don't start trading until we
             # hit the the start_from_dt trading date
+
+            if not self.FLAT:
+                self.current_trade['Duration'] += 1
+                ## self.current_trade['CurDate'] = cur_dt.strftime("%Y-%m-%d")
+                ## print(json.dumps(self.current_trade, indent=4))
 
             self.exit_CLOSE(cur_dt, bar, ref_bar)
             self.trade_update(cur_dt, bar, ref_bar)
