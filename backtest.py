@@ -602,7 +602,9 @@ class BackTest():
 
             ref_bar = None
             if self.ref_index is not None:
-                ref_bar = self.ref_index.fetch_bar(bar['Date'])
+                ref_tuple = self.ref_index.fetch_bar(bar['Date'])
+                ## unpack index, date, and bar from reference
+                ref_i, ref_cur_dt, ref_bar = ref_tuple
             
             self.exit_OPEN(cur_dt, bar, ref_bar)
             self.entry_OPEN(cur_dt, bar, ref_bar)
