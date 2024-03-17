@@ -63,8 +63,10 @@ class BackTest():
         self.config = json_config
 
         ## turn on backtest
-        self.backtest_disabled = False
-        self.start_dt = self.config.get("start_date")
+        self.backtest_enabled = True 
+        settings = self.config.get('settings')
+        if settings:
+            self.start_dt = self.start_from( settings.get("start_date") )
 
         ## Security objects
         self.security = security  
@@ -265,7 +267,7 @@ class BackTest():
 
 
     def entry_OPEN(self, cur_dt, bar, ref_bar=None):
-        if self.backtest_disabled:
+        if self.backtest_enabled == False:
             return
 
         if not self.FLAT:
@@ -274,7 +276,7 @@ class BackTest():
         # self.enter_trade( TradeType.BUY, bar['Date'], self.security, bar['Open'], label='LEX' )
 
     def exit_OPEN(self, cur_dt, bar, ref_bar=None):
-        if self.backtest_disabled:
+        if self.backtest_enabled == False:
             return
 
         if self.FLAT:
@@ -285,7 +287,7 @@ class BackTest():
 
 
     def entry_CLOSE(self, cur_dt, bar, ref_bar=None):
-        if self.backtest_disabled:
+        if self.backtest_enabled == False:
             return
 
         if not self.FLAT:
@@ -296,7 +298,7 @@ class BackTest():
 
 
     def exit_CLOSE(self, cur_dt, bar, ref_bar=None):
-        if self.backtest_disabled:
+        if self.backtest_enabled == False:
             return
 
         if self.FLAT:
@@ -528,11 +530,13 @@ class BackTest():
    
     ## start back-test from a specific date
     def start_from(self, start_from_dt):
+        s = None
         if start_from_dt is not None:
             if isinstance(start_from_dt, date):
-                self.start_dt = start_from_dt
+                s = start_from_dt
             else:
-                self.start_dt = datetime.strptime(start_from_dt,"%Y-%m-%d").date()
+                s = datetime.strptime(start_from_dt,"%Y-%m-%d").date()
+        return s
 
     def mark_to_market(self, mark_price):
         tick_size = self.security.tick_size
@@ -596,9 +600,9 @@ class BackTest():
             except StopIteration:
                 break
 
-            self.backtest_disabled = False
+            self.backtest_enabled = True 
             if self.start_dt and cur_dt < self.start_dt:
-                self.backtest_disabled = True 
+                self.backtest_enabled = False 
 
             ref_bar = None
             if self.ref_index is not None:
@@ -629,7 +633,8 @@ class BackTest():
 
             ## record trade info for the day.
             backtest_dict = self.record_backtest_data( bar )
-            self.trade_series.append( backtest_dict )
+            if self.backtest_enabled:
+                self.trade_series.append( backtest_dict )
 
             ## reset trade
             if self.CLOSED:
